@@ -1,4 +1,4 @@
-//! Generic pagination primitives used across all list endpoints.
+//! Pagination primitives used across list endpoints.
 
 use serde::{Deserialize, Serialize};
 
@@ -10,21 +10,31 @@ pub struct SearchParams {
     /// The one-based page number to retrieve.
     pub page: Option<u64>,
     /// The maximum number of items per page.
-    pub per_page: Option<u64>,
+    pub size: Option<u64>,
 }
 
-/// A generic paginated response envelope.
+/// Metadata describing the pagination state of a response.
 ///
-/// Wraps a `Vec<T>` of items together with metadata describing the current
-/// page, items per page, and total item count.
+/// Serialised with camelCase field names to match the API contract
+/// (e.g. `totalElements`, `totalPages`).
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PageInfo {
+    /// The maximum number of items per page.
+    pub size: u64,
+    /// The one-based page number that was returned.
+    pub number: u64,
+    /// The total number of items matching the query across all pages.
+    pub total_elements: u64,
+    /// The total number of pages available.
+    pub total_pages: u64,
+}
+
+/// A paginated response envelope containing notes and page metadata.
 #[derive(Debug, Clone, Serialize)]
 pub struct PaginatedResponse<T: Serialize> {
-    /// The items for the current page.
-    pub data: Vec<T>,
-    /// The total number of items matching the query across all pages.
-    pub total: u64,
-    /// The one-based page number that was returned.
-    pub page: u64,
-    /// The maximum number of items per page.
-    pub per_page: u64,
+    /// The note items for the current page.
+    pub notes: Vec<T>,
+    /// Pagination metadata.
+    pub page: PageInfo,
 }

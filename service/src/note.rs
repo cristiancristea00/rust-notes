@@ -19,11 +19,11 @@ const MAX_TITLE_LEN: usize = 255;
 /// Default page number when none is provided by the client.
 const DEFAULT_PAGE: u64 = 1;
 
-/// Default number of items per page when none is provided by the client.
-const DEFAULT_PER_PAGE: u64 = 20;
+/// Default page size when none is provided by the client.
+const DEFAULT_SIZE: u64 = 20;
 
-/// Hard upper limit on items per page to prevent excessively large responses.
-const MAX_PER_PAGE: u64 = 100;
+/// Hard upper limit on page size to prevent excessively large responses.
+const MAX_SIZE: u64 = 100;
 
 /// Trait abstracting CRUD business operations for notes.
 ///
@@ -70,14 +70,17 @@ trait Validate {
 impl Validate for CreateNoteRequest {
     fn validate(&self) -> Result<(), ServiceError> {
         if self.title.trim().is_empty() {
+            tracing::warn!("Validation failed: title is empty");
             return Err(ServiceError::Validation("Title must not be empty".into()));
         }
 
         if self.title.len() > MAX_TITLE_LEN {
+            tracing::warn!(length = self.title.len(), max = MAX_TITLE_LEN, "Validation failed: title too long");
             return Err(ServiceError::Validation(format!("Title must be at most {MAX_TITLE_LEN} characters")));
         }
 
         if self.content.trim().is_empty() {
+            tracing::warn!("Validation failed: content is empty");
             return Err(ServiceError::Validation("Content must not be empty".into()));
         }
 
@@ -89,16 +92,19 @@ impl Validate for UpdateNoteRequest {
     fn validate(&self) -> Result<(), ServiceError> {
         if let Some(ref title) = self.title {
             if title.trim().is_empty() {
+                tracing::warn!("Validation failed: title is empty");
                 return Err(ServiceError::Validation("Title must not be empty".into()));
             }
 
             if title.len() > MAX_TITLE_LEN {
+                tracing::warn!(length = title.len(), max = MAX_TITLE_LEN, "Validation failed: title too long");
                 return Err(ServiceError::Validation(format!("Title must be at most {MAX_TITLE_LEN} characters")));
             }
         }
 
         if let Some(ref content) = self.content {
             if content.trim().is_empty() {
+                tracing::warn!("Validation failed: content is empty");
                 return Err(ServiceError::Validation("Content must not be empty".into()));
             }
         }
@@ -110,6 +116,7 @@ impl Validate for UpdateNoteRequest {
 impl<Repo: NoteRepository> NoteService for NoteServiceImpl<Repo> {
     /// Validates the incoming request and delegates to the repository to
     /// persist the new note.
+    #[tracing::instrument(skip_all)]
     async fn create(&self, request: CreateNoteRequest) -> Result<NoteResponse, ServiceError> {
         request.validate()?;
 
@@ -118,21 +125,24 @@ impl<Repo: NoteRepository> NoteService for NoteServiceImpl<Repo> {
 
     /// Fetches a single note by ID, translating repository errors into
     /// service-layer errors.
+    #[tracing::instrument(skip_all)]
     async fn find_by_id(&self, id: i64) -> Result<NoteResponse, ServiceError> {
         self.repository.find_by_id(id).await.map_err(ServiceError::from)
     }
 
-    /// Applies sensible pagination defaults (page ≥ 1, per_page ≤ 100), then
+    /// Applies sensible pagination defaults (page ≥ 1, size ≤ 100), then
     /// delegates to the repository.
+    #[tracing::instrument(skip_all)]
     async fn find_all(&self, mut parameters: SearchParams) -> Result<PaginatedResponse<NoteResponse>, ServiceError> {
         parameters.page = Some(parameters.page.unwrap_or(DEFAULT_PAGE).max(1));
-        parameters.per_page = Some(parameters.per_page.unwrap_or(DEFAULT_PER_PAGE).min(MAX_PER_PAGE));
+        parameters.size = Some(parameters.size.unwrap_or(DEFAULT_SIZE).min(MAX_SIZE));
 
         self.repository.find_all(parameters).await.map_err(ServiceError::from)
     }
 
     /// Validates the incoming request and delegates to the repository to
     /// update the existing note.
+    #[tracing::instrument(skip_all)]
     async fn update(&self, id: i64, request: UpdateNoteRequest) -> Result<NoteResponse, ServiceError> {
         request.validate()?;
 
@@ -141,6 +151,7 @@ impl<Repo: NoteRepository> NoteService for NoteServiceImpl<Repo> {
 
     /// Delegates the deletion to the repository, translating any resulting
     /// error.
+    #[tracing::instrument(skip_all)]
     async fn delete(&self, id: i64) -> Result<(), ServiceError> {
         self.repository.delete(id).await.map_err(ServiceError::from)
     }

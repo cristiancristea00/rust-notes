@@ -15,3 +15,4 @@ model = { workspace = true }
 service = { workspace = true }
 axum = { workspace = true }
 serde_json = { workspace = true }
+tracing = { workspace = true }

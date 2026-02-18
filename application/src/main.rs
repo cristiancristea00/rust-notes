@@ -3,6 +3,8 @@
 //! Reads configuration from environment variables, initialises the database
 //! connection, runs pending migrations, and starts the Axum HTTP server.
 
+mod logging;
+
 use anyhow::Result;
 use axum::Router;
 use controller::AppRouter;
@@ -34,10 +36,14 @@ const DEFAULT_SERVER_PORT: &str = "8080";
 /// starts serving HTTP requests.
 #[tokio::main]
 async fn main() -> Result<()> {
+    logging::init();
+
     let database_url: String = std::env::var(ENV_DATABASE_URL).unwrap_or_else(|_| DEFAULT_DATABASE_URL.into());
 
+    tracing::info!(url = %database_url, "Connecting to database");
     let database_manager = DatabaseManager::new(&database_url).await?;
 
+    tracing::info!("Running database migrations");
     migration::Migrator::up(database_manager.connection(), None).await?;
 
     let repository = NoteRepositoryImpl::new(database_manager.into_connection());
@@ -49,7 +55,7 @@ async fn main() -> Result<()> {
     let server_url: String = format!("{server_hostname}:{server_port}");
 
     let listener = TcpListener::bind(server_url.as_str()).await?;
-    println!("Listening on {server_url}");
+    tracing::info!(address = %server_url, "Server listening");
     axum::serve(listener, router).await?;
 
     Ok(())

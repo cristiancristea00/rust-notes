@@ -7,7 +7,7 @@ use chrono::{DateTime, Utc};
 use model::{
     dto::{
         note::{CreateNoteRequest, NoteResponse, UpdateNoteRequest},
-        pagination::{PaginatedResponse, SearchParams},
+        pagination::{PageInfo, PaginatedResponse, SearchParams},
     },
     entity::note,
 };
@@ -67,6 +67,7 @@ impl NoteRepositoryImpl {
 
 impl NoteRepository for NoteRepositoryImpl {
     /// Inserts a new note row and returns the created record as a response DTO.
+    #[tracing::instrument(skip_all)]
     async fn create(&self, req: CreateNoteRequest) -> Result<NoteResponse, NoteRepositoryError> {
         let new_note = note::ActiveModel {
             title: Set(req.title),
@@ -75,13 +76,17 @@ impl NoteRepository for NoteRepositoryImpl {
         };
 
         let note_model: note::Model = new_note.insert(&self.database).await?;
+        tracing::debug!(id = note_model.id, "Note inserted");
 
         Ok(self.to_response(note_model))
     }
 
     /// Fetches a single note by ID, returning [`NoteRepositoryError::NotFound`]
     /// if no matching row exists.
+    #[tracing::instrument(skip_all)]
     async fn find_by_id(&self, id: i64) -> Result<NoteResponse, NoteRepositoryError> {
+        tracing::debug!(id, "Fetching note by ID");
+
         let note_model = note::Entity::find_by_id(id)
             .one(&self.database)
             .await?
@@ -92,9 +97,12 @@ impl NoteRepository for NoteRepositoryImpl {
 
     /// Queries notes with optional title filtering, ordered by ID ascending,
     /// and returns a paginated response.
+    #[tracing::instrument(skip_all)]
     async fn find_all(&self, parameters: SearchParams) -> Result<PaginatedResponse<NoteResponse>, NoteRepositoryError> {
         let page: u64 = parameters.page.unwrap();
-        let per_page: u64 = parameters.per_page.unwrap();
+        let size: u64 = parameters.size.unwrap();
+
+        tracing::debug!(page, size, "Fetching paginated notes");
 
         let mut query = note::Entity::find();
 
@@ -104,19 +112,32 @@ impl NoteRepository for NoteRepositoryImpl {
 
         let sorted_query = query.order_by_id_asc();
 
-        let paginator = sorted_query.paginate(&self.database, per_page);
+        let paginator = sorted_query.paginate(&self.database, size);
 
         let total: u64 = paginator.num_items().await?;
         let notes: Vec<note::Model> = paginator.fetch_page(page - 1).await?;
 
-        let data: Vec<NoteResponse> = notes.into_iter().map(|model: note::Model| self.to_response(model)).collect();
+        tracing::debug!(total, count = notes.len(), "Query completed");
 
-        Ok(PaginatedResponse { data, total, page, per_page })
+        let total_pages: u64 = total.div_ceil(size);
+        let notes: Vec<NoteResponse> = notes.into_iter().map(|model: note::Model| self.to_response(model)).collect();
+
+        let page_info = PageInfo {
+            size,
+            number: if total_pages == 0 { 0 } else { page },
+            total_elements: total,
+            total_pages,
+        };
+
+        Ok(PaginatedResponse { notes, page: page_info })
     }
 
     /// Updates a note inside a transaction, touching only the fields present
     /// in the request, and stamps the current UTC time on `updated_at`.
+    #[tracing::instrument(skip_all)]
     async fn update(&self, id: i64, req: UpdateNoteRequest) -> Result<NoteResponse, NoteRepositoryError> {
+        tracing::debug!(id, "Updating note");
+
         let transaction: DatabaseTransaction = self.database.begin().await?;
 
         let note_model: note::Model = note::Entity::find_by_id(id)
@@ -140,12 +161,17 @@ impl NoteRepository for NoteRepositoryImpl {
         let updated_note_model: note::Model = active_note_model.update(&transaction).await?;
         transaction.commit().await?;
 
+        tracing::debug!(id, "Note updated");
+
         Ok(self.to_response(updated_note_model))
     }
 
     /// Deletes a note by ID, returning [`NoteRepositoryError::NotFound`] if no
     /// rows were affected.
+    #[tracing::instrument(skip_all)]
     async fn delete(&self, id: i64) -> Result<(), NoteRepositoryError> {
+        tracing::debug!(id, "Deleting note");
+
         let delete_result: DeleteResult = note::Entity::delete_by_id(id).exec(&self.database).await?;
 
         if delete_result.rows_affected == 0 {

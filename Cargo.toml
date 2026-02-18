@@ -51,7 +51,9 @@ sqlx = { version = "0.8.6", features = [
     "postgres",
 ] }
 
-anyhow = "1.0.101"
+anyhow = "1.0"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [profile.dev]
 opt-level = 0

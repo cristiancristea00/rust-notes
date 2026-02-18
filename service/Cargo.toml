@@ -14,3 +14,4 @@ edition.workspace = true
 model = { workspace = true }
 repository = { workspace = true }
 thiserror = { workspace = true }
+tracing = { workspace = true }

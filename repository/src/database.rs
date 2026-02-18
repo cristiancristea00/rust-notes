@@ -29,7 +29,10 @@ impl DatabaseManager {
     pub async fn new(database_url: &str) -> Result<Self, DbErr> {
         let is_sqlite = database_url.starts_with("sqlite");
         let connection_options = Self::build_options(database_url, is_sqlite);
+
+        tracing::debug!(is_sqlite, "Building connection options");
         let connection = Database::connect(connection_options).await?;
+        tracing::info!("Database connection established");
 
         Ok(Self { connection })
     }
