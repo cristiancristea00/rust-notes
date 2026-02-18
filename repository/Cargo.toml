@@ -13,4 +13,5 @@ edition.workspace = true
 [dependencies]
 model = { workspace = true }
 sea-orm = { workspace = true }
-sqlx = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }

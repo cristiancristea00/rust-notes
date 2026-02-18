@@ -1,14 +1,7 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! Business-logic layer for the notes application.
+//!
+//! This crate sits between the controller (HTTP) and the repository (database)
+//! layers, providing validation, default pagination, and error translation.
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub mod error;
+pub mod note;

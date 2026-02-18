@@ -13,3 +13,4 @@ edition.workspace = true
 [dependencies]
 model = { workspace = true }
 repository = { workspace = true }
+thiserror = { workspace = true }

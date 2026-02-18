@@ -1,14 +1,11 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+//! HTTP controller layer for the notes application.
+//!
+//! This crate wires Axum route handlers to the [`NoteService`](service::note::NoteService)
+//! trait, translating HTTP requests into service calls and service errors into
+//! JSON error responses.
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+pub mod error;
+pub mod note;
+pub mod router;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-}
+pub use router::AppRouter;

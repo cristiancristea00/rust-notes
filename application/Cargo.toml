@@ -12,3 +12,9 @@ edition.workspace = true
 
 [dependencies]
 controller = { workspace = true }
+repository = { workspace = true }
+migration = { workspace = true }
+service = { workspace = true }
+axum = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }

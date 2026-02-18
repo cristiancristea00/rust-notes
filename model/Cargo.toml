@@ -11,3 +11,6 @@ publish.workspace = true
 edition.workspace = true
 
 [dependencies]
+sea-orm = { workspace = true }
+serde = { workspace = true }
+chrono = { workspace = true }

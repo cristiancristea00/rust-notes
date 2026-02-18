@@ -30,25 +30,28 @@ migration = { path = "migration" }
 axum = "0.8.8"
 tokio = { version = "1.49.0", features = ["full"] }
 tower = "0.5.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+chrono = { version = "0.4", features = ["serde"] }
 
 sea-orm = { version = "2.0.0-rc", features = [
     "sqlx-sqlite",
     "sqlx-postgres",
     "runtime-tokio-rustls",
     "macros",
+    "with-chrono",
 ] }
 
-sea-orm-migration = { version = "2.0.0-rc", features = [
-    "sqlx-sqlite",
-    "sqlx-postgres",
-    "runtime-tokio-rustls",
-] }
+sea-orm-migration = "2.0.0-rc"
 
 sqlx = { version = "0.8.6", features = [
     "runtime-tokio-rustls",
     "sqlite",
     "postgres",
 ] }
+
+anyhow = "1.0.101"
 
 [profile.dev]
 opt-level = 0
