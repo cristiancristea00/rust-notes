@@ -1,0 +1,81 @@
+[workspace]
+resolver = "3"
+members = [
+    "application",
+    "controller",
+    "service",
+    "repository",
+    "model",
+    "migration",
+]
+
+[workspace.package]
+description = "A simple web API for managing notes, built in Rust using Axum and SeaORM."
+readme = "README.md"
+repository = "https://github.com/cristiancristea00/rust-notes"
+version = "1.0.0-alpha"
+license = "GPL-3.0-only"
+keywords = ["rust", "web", "api", "axum", "seaorm"]
+categories = ["web-programming", "database"]
+publish = false
+edition = "2024"
+
+[workspace.dependencies]
+controller = { path = "controller" }
+service = { path = "service" }
+repository = { path = "repository" }
+model = { path = "model" }
+migration = { path = "migration" }
+
+axum = "0.8.8"
+tokio = { version = "1.49.0", features = ["full"] }
+tower = "0.5.3"
+
+sea-orm = { version = "2.0.0-rc", features = [
+    "sqlx-sqlite",
+    "sqlx-postgres",
+    "runtime-tokio-rustls",
+    "macros",
+] }
+
+sea-orm-migration = { version = "2.0.0-rc", features = [
+    "sqlx-sqlite",
+    "sqlx-postgres",
+    "runtime-tokio-rustls",
+] }
+
+sqlx = { version = "0.8.6", features = [
+    "runtime-tokio-rustls",
+    "sqlite",
+    "postgres",
+] }
+
+[profile.dev]
+opt-level = 0
+debug = true
+strip = "none"
+overflow-checks = true
+lto = "off"
+incremental = true
+
+[profile.dev.build-override]
+opt-level = 0
+debug = true
+strip = "none"
+overflow-checks = true
+incremental = true
+
+[profile.release]
+opt-level = 3
+debug = false
+strip = "symbols"
+overflow-checks = true
+lto = "fat"
+incremental = true
+
+[profile.release.build-override]
+opt-level = 3
+debug = false
+strip = "symbols"
+overflow-checks = true
+incremental = true
