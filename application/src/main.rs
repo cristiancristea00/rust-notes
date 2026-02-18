@@ -10,6 +10,7 @@ use migration::MigratorTrait;
 use repository::database::DatabaseManager;
 use repository::note::NoteRepositoryImpl;
 use service::note::NoteServiceImpl;
+use tokio::net::TcpListener;
 
 /// Environment variable key for the database connection URL.
 const ENV_DATABASE_URL: &str = "DATABASE_URL";
@@ -47,7 +48,7 @@ async fn main() -> Result<()> {
     let server_port: String = std::env::var(ENV_SERVER_PORT).unwrap_or_else(|_| DEFAULT_SERVER_PORT.into());
     let server_url: String = format!("{server_hostname}:{server_port}");
 
-    let listener = tokio::net::TcpListener::bind(server_url.as_str()).await?;
+    let listener = TcpListener::bind(server_url.as_str()).await?;
     println!("Listening on {server_url}");
     axum::serve(listener, router).await?;
 

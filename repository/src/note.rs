@@ -59,8 +59,8 @@ impl NoteRepositoryImpl {
             id: note_model.id,
             title: note_model.title,
             content: note_model.content,
-            created_at: note_model.created_at,
-            updated_at: note_model.updated_at,
+            created_at: note_model.created_at.into(),
+            updated_at: note_model.updated_at.into(),
         }
     }
 }

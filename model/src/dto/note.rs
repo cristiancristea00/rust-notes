@@ -1,6 +1,6 @@
 //! Note-specific request and response DTOs.
 
-use chrono::{DateTime, Utc};
+use crate::dto::datetime::FormattedDateTime;
 use serde::{Deserialize, Serialize};
 
 /// Request body for creating a new note.
@@ -33,8 +33,10 @@ pub struct NoteResponse {
     pub title: String,
     /// The main body content of the note.
     pub content: String,
-    /// The timestamp at which the note was originally created (UTC).
-    pub created_at: DateTime<Utc>,
-    /// The timestamp at which the note was last updated (UTC).
-    pub updated_at: DateTime<Utc>,
+    /// The timestamp at which the note was originally created (UTC),
+    /// formatted as e.g. `Friday, 3rd August 2034, 12:45:34 PM UTC`.
+    pub created_at: FormattedDateTime,
+    /// The timestamp at which the note was last updated (UTC),
+    /// formatted as e.g. `Friday, 3rd August 2034, 12:45:34 PM UTC`.
+    pub updated_at: FormattedDateTime,
 }
