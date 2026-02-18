@@ -1,14 +1,11 @@
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
+pub use sea_orm_migration::prelude::*;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+mod create_notes_table;
 
-    #[test]
-    fn it_works() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
+pub struct Migrator;
+
+impl MigratorTrait for Migrator {
+    fn migrations() -> Vec<Box<dyn MigrationTrait>> {
+        vec![Box::new(create_notes_table::Migration)]
     }
 }
