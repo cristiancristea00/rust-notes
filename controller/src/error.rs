@@ -10,6 +10,7 @@ use axum::{
     response::{IntoResponse, Response},
     Json,
 };
+use model::dto::pagination::SortFieldName;
 use service::error::ServiceError;
 
 /// Unified application error that can originate from either the service
@@ -29,9 +30,28 @@ impl From<ServiceError> for AppError {
     }
 }
 
+/// Returns a human-readable description of all valid query parameters for list
+/// endpoints, including their types and the accepted sort fields.
+fn query_params_hint() -> String {
+    format!(
+        "Valid parameters: title (string), page (positive integer), \
+         size (positive integer), orderBy (comma-separated fields: {})",
+        SortFieldName::all_names()
+    )
+}
+
 impl From<QueryRejection> for AppError {
     fn from(rejection: QueryRejection) -> Self {
-        AppError::BadRequest(rejection.body_text())
+        let body = rejection.body_text();
+        let prefix = if let Some(start) = body.find("unknown field `") {
+            let rest = &body[start + "unknown field `".len()..];
+            let field = rest.split('`').next().unwrap_or("unknown");
+            format!("Invalid query parameter '{field}'.")
+        } else {
+            "Invalid query parameters.".to_owned()
+        };
+
+        AppError::BadRequest(format!("{prefix} {}", query_params_hint()))
     }
 }
 

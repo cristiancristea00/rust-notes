@@ -6,7 +6,7 @@
 
 use model::dto::{
     note::{CreateNoteRequest, NoteResponse, UpdateNoteRequest},
-    pagination::{PaginatedResponse, SearchParams},
+    pagination::{PaginatedResponse, SearchParams, SortDirection, SortField, SortFieldName},
 };
 use repository::note::NoteRepository;
 use std::future::Future;
@@ -24,6 +24,44 @@ const DEFAULT_SIZE: u64 = 20;
 
 /// Hard upper limit on page size to prevent excessively large responses.
 const MAX_SIZE: u64 = 100;
+
+/// Parses a comma-separated `orderBy` string into a non-empty [`Vec`] of
+/// [`SortField`]s.
+///
+/// Each token may be prefixed with `+` (ascending, default) or `-`
+/// (descending). Returns a [`ServiceError::Validation`] when the string is
+/// blank or contains only commas, or when a field name is unrecognised.
+fn parse_sort_fields(raw: &str) -> Result<Vec<SortField>, ServiceError> {
+    let fields: Vec<SortField> = raw
+        .split(',')
+        .map(str::trim)
+        .filter(|string| !string.is_empty())
+        .map(|token| {
+            let (direction, name) = if let Some(rest) = token.strip_prefix('-') {
+                (SortDirection::Descending, rest)
+            } else {
+                (SortDirection::Ascending, token.strip_prefix('+').unwrap_or(token))
+            };
+
+            let name: SortFieldName = name.parse().map_err(|err: String| {
+                tracing::warn!(field = name, "Validation failed: unknown sort field");
+                ServiceError::Validation(err)
+            })?;
+
+            Ok(SortField { name, direction })
+        })
+        .collect::<Result<Vec<SortField>, ServiceError>>()?;
+
+    if fields.is_empty() {
+        tracing::warn!("Validation failed: orderBy is present but contains no fields");
+        return Err(ServiceError::Validation(format!(
+            "orderBy must contain at least one field. Valid fields: {}",
+            SortFieldName::all_names()
+        )));
+    }
+
+    Ok(fields)
+}
 
 /// Trait abstracting CRUD business operations for notes.
 ///
@@ -130,12 +168,16 @@ impl<Repo: NoteRepository> NoteService for NoteServiceImpl<Repo> {
         self.repository.find_by_id(id).await.map_err(ServiceError::from)
     }
 
-    /// Applies sensible pagination defaults (page ≥ 1, size ≤ 100), then
-    /// delegates to the repository.
+    /// Validates sort fields, applies sensible pagination defaults
+    /// (page ≥ 1, size ≤ 100), then delegates to the repository.
     #[tracing::instrument(skip_all)]
     async fn find_all(&self, mut parameters: SearchParams) -> Result<PaginatedResponse<NoteResponse>, ServiceError> {
         parameters.page = Some(parameters.page.unwrap_or(DEFAULT_PAGE).max(1));
         parameters.size = Some(parameters.size.unwrap_or(DEFAULT_SIZE).min(MAX_SIZE));
+
+        if let Some(ref raw) = parameters.order_by.clone() {
+            parameters.sort_fields = parse_sort_fields(raw)?;
+        }
 
         self.repository.find_all(parameters).await.map_err(ServiceError::from)
     }

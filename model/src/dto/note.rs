@@ -26,6 +26,7 @@ pub struct UpdateNoteRequest {
 
 /// Serialisable representation of a note returned to the client.
 #[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct NoteResponse {
     /// The unique identifier of the note.
     pub id: i64,

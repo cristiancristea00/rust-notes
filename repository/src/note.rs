@@ -3,7 +3,7 @@
 //! The [`NoteRepository`] trait defines the persistence contract for notes,
 //! whilst [`NoteRepositoryImpl`] fulfils it using a [`DatabaseConnection`].
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use model::{
     dto::{
         note::{CreateNoteRequest, NoteResponse, UpdateNoteRequest},
@@ -12,12 +12,15 @@ use model::{
     entity::note,
 };
 use sea_orm::{
-    ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection, DatabaseTransaction, DeleteResult, EntityTrait, PaginatorTrait, QueryFilter,
-    TransactionTrait,
+    ActiveModelTrait, ActiveValue::Set, ColumnTrait, DatabaseConnection, DatabaseTransaction, DeleteResult, EntityTrait, Order, PaginatorTrait,
+    QueryFilter, QueryOrder, Select, TransactionTrait,
 };
 use std::future::Future;
 
-use crate::error::NoteRepositoryError;
+use crate::{
+    error::NoteRepositoryError,
+    sort::{IntoColumn, IntoOrder},
+};
 
 /// Trait abstracting CRUD operations for notes.
 ///
@@ -54,13 +57,77 @@ impl NoteRepositoryImpl {
     }
 
     /// Converts a SeaORM [`note::Model`] into a [`NoteResponse`] DTO.
-    fn to_response(&self, note_model: note::Model) -> NoteResponse {
+    fn to_response(&self, model: note::Model) -> NoteResponse {
         NoteResponse {
-            id: note_model.id,
-            title: note_model.title,
-            content: note_model.content,
-            created_at: note_model.created_at.into(),
-            updated_at: note_model.updated_at.into(),
+            id: model.id,
+            title: model.title,
+            content: model.content,
+            created_at: model.created_at.into(),
+            updated_at: model.updated_at.into(),
+        }
+    }
+
+    /// Builds a filtered and sorted [`Select`] query from the given
+    /// [`SearchParams`].
+    ///
+    /// Applies an optional title substring filter and the caller-supplied sort
+    /// fields in order. Falls back to ascending ID order when no sort fields
+    /// are present.
+    fn build_note_query(&self, parameters: &SearchParams) -> Select<note::Entity> {
+        let mut query = note::Entity::find();
+
+        if let Some(ref title) = parameters.title {
+            query = query.filter(note::Column::Title.contains(title.as_str()));
+        }
+
+        if parameters.sort_fields.is_empty() {
+            return query.order_by(note::Column::Id, Order::Asc);
+        }
+
+        for sort_field in &parameters.sort_fields {
+            query = query.order_by(sort_field.name.into_column(), sort_field.direction.into_order());
+        }
+
+        query
+    }
+
+    /// Constructs a [`PageInfo`] from pagination state and the total element
+    /// count.
+    fn build_page_info(page: u64, size: u64, total: u64) -> PageInfo {
+        let total_pages = total.div_ceil(size);
+        PageInfo {
+            size,
+            number: if total_pages == 0 { 0 } else { page },
+            total_elements: total,
+            total_pages,
+        }
+    }
+
+    /// Fetches a note by ID within an active transaction and returns it as an
+    /// [`ActiveModel`](note::ActiveModel) ready for mutation.
+    ///
+    /// Returns [`NoteRepositoryError::NotFound`] when no matching row exists.
+    async fn find_note_in_transaction(&self, id: i64, transaction: &DatabaseTransaction) -> Result<note::ActiveModel, NoteRepositoryError> {
+        let model = note::Entity::find_by_id(id)
+            .one(transaction)
+            .await?
+            .ok_or(NoteRepositoryError::NotFound(id))?;
+
+        Ok(model.into())
+    }
+
+    /// Applies the fields from an [`UpdateNoteRequest`] to an active model,
+    /// stamping `updated_at` to the current UTC time regardless of which
+    /// fields were provided.
+    fn apply_update_fields(active: &mut note::ActiveModel, req: UpdateNoteRequest) {
+        active.updated_at = Set(Utc::now());
+
+        if let Some(title) = req.title {
+            active.title = Set(title);
+        }
+
+        if let Some(content) = req.content {
+            active.content = Set(content);
         }
     }
 }
@@ -95,41 +162,27 @@ impl NoteRepository for NoteRepositoryImpl {
         Ok(self.to_response(note_model))
     }
 
-    /// Queries notes with optional title filtering, ordered by ID ascending,
+    /// Queries notes with optional filtering and caller-specified ordering,
     /// and returns a paginated response.
     #[tracing::instrument(skip_all)]
     async fn find_all(&self, parameters: SearchParams) -> Result<PaginatedResponse<NoteResponse>, NoteRepositoryError> {
-        let page: u64 = parameters.page.unwrap();
-        let size: u64 = parameters.size.unwrap();
+        let page = parameters.page.unwrap();
+        let size = parameters.size.unwrap();
 
         tracing::debug!(page, size, "Fetching paginated notes");
 
-        let mut query = note::Entity::find();
+        let paginator = self.build_note_query(&parameters).paginate(&self.database, size);
+        let total = paginator.num_items().await?;
+        let models = paginator.fetch_page(page - 1).await?;
 
-        if let Some(ref title) = parameters.title {
-            query = query.filter(note::Column::Title.contains(title.as_str()));
-        }
+        tracing::debug!(total, count = models.len(), "Query completed");
 
-        let sorted_query = query.order_by_id_asc();
+        let notes = models.into_iter().map(|m| self.to_response(m)).collect();
 
-        let paginator = sorted_query.paginate(&self.database, size);
-
-        let total: u64 = paginator.num_items().await?;
-        let notes: Vec<note::Model> = paginator.fetch_page(page - 1).await?;
-
-        tracing::debug!(total, count = notes.len(), "Query completed");
-
-        let total_pages: u64 = total.div_ceil(size);
-        let notes: Vec<NoteResponse> = notes.into_iter().map(|model: note::Model| self.to_response(model)).collect();
-
-        let page_info = PageInfo {
-            size,
-            number: if total_pages == 0 { 0 } else { page },
-            total_elements: total,
-            total_pages,
-        };
-
-        Ok(PaginatedResponse { notes, page: page_info })
+        Ok(PaginatedResponse {
+            notes,
+            page: Self::build_page_info(page, size, total),
+        })
     }
 
     /// Updates a note inside a transaction, touching only the fields present
@@ -138,32 +191,17 @@ impl NoteRepository for NoteRepositoryImpl {
     async fn update(&self, id: i64, req: UpdateNoteRequest) -> Result<NoteResponse, NoteRepositoryError> {
         tracing::debug!(id, "Updating note");
 
-        let transaction: DatabaseTransaction = self.database.begin().await?;
+        let transaction = self.database.begin().await?;
+        let mut active = self.find_note_in_transaction(id, &transaction).await?;
 
-        let note_model: note::Model = note::Entity::find_by_id(id)
-            .one(&transaction)
-            .await?
-            .ok_or(NoteRepositoryError::NotFound(id))?;
+        Self::apply_update_fields(&mut active, req);
 
-        let mut active_note_model: note::ActiveModel = note_model.into();
-
-        let now: DateTime<Utc> = Utc::now();
-        active_note_model.updated_at = Set(now);
-
-        if let Some(title) = req.title {
-            active_note_model.title = Set(title);
-        }
-
-        if let Some(content) = req.content {
-            active_note_model.content = Set(content);
-        }
-
-        let updated_note_model: note::Model = active_note_model.update(&transaction).await?;
+        let updated = active.update(&transaction).await?;
         transaction.commit().await?;
 
         tracing::debug!(id, "Note updated");
 
-        Ok(self.to_response(updated_note_model))
+        Ok(self.to_response(updated))
     }
 
     /// Deletes a note by ID, returning [`NoteRepositoryError::NotFound`] if no
