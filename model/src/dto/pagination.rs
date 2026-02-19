@@ -63,7 +63,7 @@ impl FromStr for SortFieldName {
             "content" => Ok(Self::Content),
             "createdAt" => Ok(Self::CreatedAt),
             "updatedAt" => Ok(Self::UpdatedAt),
-            other => Err(format!("Unknown sort field: '{other}'. Valid fields: {}", Self::all_names())),
+            other => Err(format!("Unknown 'orderBy' field: '{other}'. Valid fields: {}", Self::all_names())),
         }
     }
 }
@@ -77,16 +77,26 @@ pub struct SortField {
     pub direction: SortDirection,
 }
 
+/// Metadata describing a single accepted query parameter.
+pub struct QueryParamInfo {
+    /// The query string key as it appears in the URL.
+    pub name: &'static str,
+    /// A short, human-readable description of the accepted value type.
+    pub kind: &'static str,
+}
+
 /// Query parameters for paginated, optionally filtered, and sorted searches.
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SearchParams {
     /// An optional title substring to filter results by.
     pub title: Option<String>,
-    /// The one-based page number to retrieve.
-    pub page: Option<u64>,
-    /// The maximum number of items per page.
-    pub size: Option<u64>,
+    /// An optional content substring to filter results by.
+    pub content: Option<String>,
+    /// The one-based page number to retrieve, as a raw query-string value.
+    pub page: Option<String>,
+    /// The maximum number of items per page, as a raw query-string value.
+    pub size: Option<String>,
     /// Comma-separated sort fields with an optional `+` (ascending) or `-`
     /// (descending) prefix, e.g. `title,-createdAt`.
     ///
@@ -94,10 +104,55 @@ pub struct SearchParams {
     /// are rejected by the service layer with a validation error.
     #[serde(rename = "orderBy")]
     pub order_by: Option<String>,
+    /// Validated page number, populated by the service layer. Not
+    /// deserialised from the query string.
+    #[serde(skip)]
+    pub parsed_page: u64,
+    /// Validated page size, populated by the service layer. Not
+    /// deserialised from the query string.
+    #[serde(skip)]
+    pub parsed_size: u64,
     /// Parsed sort fields, populated by the service layer after validating
     /// [`order_by`](Self::order_by). Not deserialised from the query string.
     #[serde(skip)]
     pub sort_fields: Vec<SortField>,
+}
+
+impl SearchParams {
+    /// Metadata for every supported query parameter except `orderBy`, whose
+    /// description is dynamic (it embeds the set of valid sort fields).
+    ///
+    /// Use [`params_hint`](Self::params_hint) to obtain the full
+    /// human-readable string.
+    pub const QUERY_PARAMS: &'static [QueryParamInfo] = &[
+        QueryParamInfo {
+            name: "title",
+            kind: "string",
+        },
+        QueryParamInfo {
+            name: "content",
+            kind: "string",
+        },
+        QueryParamInfo {
+            name: "page",
+            kind: "positive integer",
+        },
+        QueryParamInfo {
+            name: "size",
+            kind: "positive integer",
+        },
+    ];
+
+    /// Returns a human-readable description of every accepted query parameter,
+    /// including the valid sort field names for `orderBy`.
+    pub fn params_hint() -> String {
+        let mut parts: Vec<String> = Self::QUERY_PARAMS
+            .iter()
+            .map(|param| format!("{} ({})", param.name, param.kind))
+            .collect();
+        parts.push(format!("orderBy (comma-separated fields: {})", SortFieldName::all_names()));
+        format!("Valid parameters: {}", parts.join(", "))
+    }
 }
 
 /// Metadata describing the pagination state of a response.

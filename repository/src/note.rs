@@ -80,6 +80,10 @@ impl NoteRepositoryImpl {
             query = query.filter(note::Column::Title.contains(title.as_str()));
         }
 
+        if let Some(ref content) = parameters.content {
+            query = query.filter(note::Column::Content.contains(content.as_str()));
+        }
+
         if parameters.sort_fields.is_empty() {
             return query.order_by(note::Column::Id, Order::Asc);
         }
@@ -166,8 +170,8 @@ impl NoteRepository for NoteRepositoryImpl {
     /// and returns a paginated response.
     #[tracing::instrument(skip_all)]
     async fn find_all(&self, parameters: SearchParams) -> Result<PaginatedResponse<NoteResponse>, NoteRepositoryError> {
-        let page = parameters.page.unwrap();
-        let size = parameters.size.unwrap();
+        let page = parameters.parsed_page;
+        let size = parameters.parsed_size;
 
         tracing::debug!(page, size, "Fetching paginated notes");
 

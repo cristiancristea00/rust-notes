@@ -5,12 +5,12 @@
 //! error body with the appropriate HTTP status code.
 
 use axum::{
+    Json,
     extract::rejection::{JsonRejection, PathRejection, QueryRejection},
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
 };
-use model::dto::pagination::SortFieldName;
+use model::dto::pagination::SearchParams;
 use service::error::ServiceError;
 
 /// Unified application error that can originate from either the service
@@ -30,16 +30,6 @@ impl From<ServiceError> for AppError {
     }
 }
 
-/// Returns a human-readable description of all valid query parameters for list
-/// endpoints, including their types and the accepted sort fields.
-fn query_params_hint() -> String {
-    format!(
-        "Valid parameters: title (string), page (positive integer), \
-         size (positive integer), orderBy (comma-separated fields: {})",
-        SortFieldName::all_names()
-    )
-}
-
 impl From<QueryRejection> for AppError {
     fn from(rejection: QueryRejection) -> Self {
         let body = rejection.body_text();
@@ -51,7 +41,7 @@ impl From<QueryRejection> for AppError {
             "Invalid query parameters.".to_owned()
         };
 
-        AppError::BadRequest(format!("{prefix} {}", query_params_hint()))
+        AppError::BadRequest(format!("{prefix} {}", SearchParams::params_hint()))
     }
 }
 
